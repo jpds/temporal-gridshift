@@ -1,0 +1,63 @@
+[package]
+name = "temporal-gridshift"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Shifts Temporal interval schedules into the cheapest electricity price windows"
+
+[[bin]]
+name = "worker"
+path = "src/bin/worker.rs"
+
+[[bin]]
+name = "starter"
+path = "src/bin/starter.rs"
+
+[dependencies]
+
+# Error handling
+anyhow = "1"
+
+# Async trait objects
+async-trait = "0.1"
+
+# Timezone-aware time arithmetic (compile-time IANA db; safe in workflow code)
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.9"
+
+# Stream combinators (for list_workflows consumption)
+futures = "0.3"
+
+# Human-readable duration formatting
+humantime = "2"
+
+# System timezone detection (starter binary only)
+iana-time-zone = "0.1"
+
+# Proto well-known types for RetryPolicy duration fields
+prost-wkt-types = "0.7"
+
+# HTTP (Octopus rates API)
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots"] }
+
+# Serialisation
+serde = { version = "1", features = ["derive"] }
+temporalio-client   = { version = "0.5" }
+temporalio-common   = { version = "0.5" }
+temporalio-macros   = { version = "0.5" }
+temporalio-sdk      = { version = "0.5" }
+temporalio-sdk-core = { version = "0.5" }
+temporalio-workflow = { version = "0.5" }
+thiserror = "2"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+tonic = { version = "0.14", default-features = false }
+
+# Logging
+tracing = "0.1"
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true
