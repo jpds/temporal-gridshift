@@ -224,6 +224,34 @@ in
       timeout=30
     )
 
+    # Create a 14-day interval schedule that has never fired. Its next action
+    # time is set 5 days from now, past the 48h price horizon, but still tagged
+    # EnergyIntensive=true so discover_schedules finds it.
+    # The horizon guard in discover_schedules should skip it and leave its
+    # phase unchanged.
+    now_epoch = int(temporal.succeed("date +%s").strip())
+    long_phase_secs = (now_epoch + 5 * 86400) % (14 * 86400)
+    temporal.wait_until_succeeds(
+      "temporal schedule create --namespace default --address 127.0.0.1:7233 "
+      "--schedule-id long-interval-test "
+      "--workflow-id long-interval-test-wf "
+      "--type FakeWorkflow "
+      "--task-queue fake "
+      f"--interval '14d/{long_phase_secs}s' "
+      "--schedule-search-attribute 'EnergyIntensive=true'",
+      timeout=30
+    )
+    initial_long_desc = json.loads(temporal.succeed(
+      "temporal schedule describe --namespace default --address 127.0.0.1:7233 "
+      "--schedule-id long-interval-test --output json"
+    ))
+    initial_long_phase = (
+      initial_long_desc.get("schedule", {})
+      .get("spec", {})
+      .get("interval", [{}])[0]
+      .get("phase", "0s")
+    )
+
     # Set up the restricted namespace. EnergyIntensive is intentionally NOT
     # registered here. When gridshift calls discover_schedules for this
     # namespace with query "EnergyIntensive = true", Temporal returns an error
@@ -258,11 +286,15 @@ in
       timeout=30
     )
 
-    # Wait for the managed schedule to be indexed in visibility so
-    # discover_schedules finds it when the gridshift workflow runs.
+    # Wait for the managed schedules to be indexed in visibility so
+    # discover_schedules finds them when the gridshift workflow runs.
     temporal.wait_until_succeeds(
       "temporal schedule list --namespace default --address 127.0.0.1:7233 --query 'EnergyIntensive = true' | grep -q managed-test",
       timeout=600
+    )
+    temporal.wait_until_succeeds(
+      "temporal schedule list --namespace default --address 127.0.0.1:7233 --query 'EnergyIntensive = true' | grep -q long-interval-test",
+      timeout=60
     )
 
     # Trigger the gridshift schedule immediately rather than waiting until 16:00.
@@ -316,6 +348,25 @@ in
     assert not (7200 <= phase_secs_r <= 16200), (
       f"restricted-test schedule was unexpectedly updated to phase {phase_secs_r}s "
       "(discover_schedules should have returned empty for the restricted namespace)"
+    )
+
+    # Verify long-interval-test was NOT re-pointed. It is tagged EnergyIntensive=true
+    # so discover_schedules finds it, but it has never fired and its first future
+    # action time is 5 days out. The horizon guard in discover_schedules should skip
+    # it and leave its phase unchanged.
+    final_long_desc = json.loads(temporal.succeed(
+      "temporal schedule describe --namespace default --address 127.0.0.1:7233 "
+      "--schedule-id long-interval-test --output json"
+    ))
+    final_long_phase = (
+      final_long_desc.get("schedule", {})
+      .get("spec", {})
+      .get("interval", [{}])[0]
+      .get("phase", "0s")
+    )
+    assert initial_long_phase == final_long_phase, (
+      f"long-interval-test phase changed from {initial_long_phase} to {final_long_phase}; "
+      "discover_schedules should have skipped it (next run outside price horizon)"
     )
   '';
 }

@@ -55,6 +55,13 @@ impl SchedulerWorkflow {
 
         let today = now_local.date_naive();
         let tomorrow = today.succ_opt().expect("date overflow");
+        let horizon_secs = tomorrow
+            .succ_opt()
+            .expect("date overflow")
+            .and_hms_opt(0, 0, 0)
+            .expect("midnight is valid")
+            .and_utc()
+            .timestamp();
 
         let namespaces: Vec<String> = ctx
             .start_activity(
@@ -70,6 +77,7 @@ impl SchedulerWorkflow {
                 DiscoverSchedulesInput {
                     namespace: ns.clone(),
                     query: input.query.clone(),
+                    horizon_secs,
                 },
                 ActivityOptions::start_to_close_timeout(Duration::from_secs(30)),
             )

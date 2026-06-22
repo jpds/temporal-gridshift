@@ -144,6 +144,9 @@ pub struct DiscoverSchedulesInput {
     pub namespace: String,
     /// Raw Temporal visibility query, e.g. `EnergyIntensive = true`.
     pub query: String,
+    /// Exclusive upper bound of the price window as epoch seconds (midnight UTC of day-after-tomorrow).
+    /// Schedules whose first future action time falls at or after this threshold are skipped.
+    pub horizon_secs: i64,
 }
 
 /// Activity result for discover_schedules.

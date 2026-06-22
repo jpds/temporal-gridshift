@@ -14,8 +14,9 @@ use tonic::IntoRequest;
 
 use crate::{
     DiscoverSchedulesInput, DiscoverSchedulesResult, FetchWindowsInput, MeasureDurationsInput,
-    PlanWindowsInput, PlanWindowsResult, PriceProvider, PricedWindow, ProviderError, ScheduleInfo,
-    ScheduleRef, SkippedSchedule, TryFetchWindowsResult, UpdateOutcome, UpdateWindowsInput,
+    PlanWindowsInput, PlanWindowsResult, PriceProvider, PricedWindow, ProviderError, SECS_PER_DAY,
+    ScheduleInfo, ScheduleRef, SkippedSchedule, TryFetchWindowsResult, UpdateOutcome,
+    UpdateWindowsInput,
 };
 
 use tracing::warn;
@@ -143,6 +144,12 @@ impl GridshiftActivities {
             }
         }
 
+        let horizon_secs = input.horizon_secs;
+        let now_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
         let outcomes: Vec<(String, ScheduleProbe)> = stream::iter(ids)
             .map(|schedule_id| {
                 // Every schedule here shares input.namespace - create a single client
@@ -164,6 +171,13 @@ impl GridshiftActivities {
                                 .filter_map(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                                 .map(|d| d.as_secs() as i64)
                                 .max();
+                            // Must read future_action_times before into_update() consumes desc.
+                            let next_fire_secs: Option<i64> = desc
+                                .future_action_times()
+                                .into_iter()
+                                .filter_map(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                                .map(|d| d.as_secs() as i64)
+                                .next();
                             let update = desc.into_update();
                             let raw = update.raw();
                             match raw.spec.as_ref().and_then(|s| s.interval.first()) {
@@ -176,6 +190,20 @@ impl GridshiftActivities {
 
                                     if secs == 0 {
                                         Err("interval is zero".to_owned())
+                                    } else if last_fire_secs.is_none()
+                                        && next_fire_secs.is_some_and(|nf| nf >= horizon_secs)
+                                    {
+                                        // Never-fired schedule whose first action time is
+                                        // beyond the price window. The planning layer doesn't
+                                        // handle this: last_fire_secs = None makes every slot
+                                        // eligible. Use future_action_times[0] to approximate
+                                        // the intended next fire.
+                                        let ahead_days =
+                                            next_fire_secs.unwrap().saturating_sub(now_secs)
+                                                / SECS_PER_DAY as i64;
+                                        Err(format!(
+                                            "next run in {ahead_days}d, outside the price horizon"
+                                        ))
                                     } else {
                                         Ok((secs, last_fire_secs))
                                     }

@@ -47,24 +47,20 @@ the same day, since 15:00 is only 13 hours after the last run.
 
 ### Intervals longer than the price horizon
 
-Octopus publishes prices about a day ahead, so Gridshift only ever has today's and tomorrow's
-slots to choose from. A schedule whose interval is longer than that horizon (e.g. `--interval 7d`)
-cannot be optimized until its next run is near: on most days every candidate slot falls within one
-interval of the last run, so the schedule is reported as skipped and left alone. It is re-optimized
-only on the evening before its next run is due, which is also the first time prices for that day
-exist. This falls out of the price horizon and the interval guard together, not a special case:
-there is no price data to optimize against any earlier.
+Octopus only publishes prices about a day ahead, so a schedule with a longer interval (e.g.
+`--interval 7d`) can't be optimized until its next run is near. Until then, every candidate slot
+falls within one interval of the last run, so the schedule is reported as skipped, with a reason
+like `next run in 5days, outside the price horizon`. That's expected, not an error.
 
-Some consequences:
+Consequences:
 
-- A long-interval schedule appears in the skipped list every day until it comes into range, with a
-  reason like `next run in 5days, outside the price horizon`. That is expected, not an error.
-- The guard uses the exact moment one interval after the last run as its floor, so on the run day
-  Gridshift can only move the firing later than that moment, never earlier. A weekly job whose last
-  run was at 14:00 cannot be pulled into the cheap small hours of its next run day, because that
-  would shorten the gap to under one interval.
-- A schedule that has never run has no recorded last run, so Gridshift is free to place its first
-  firing in the cheapest near-term slot rather than waiting a full interval.
+- On the run day, Gridshift can only move the firing later than one interval after the last run,
+  never earlier: a weekly job last run at 14:00 can't be pulled into the cheap small hours of its
+  next run day, since that would shorten the gap below one interval.
+- A schedule that has never run uses its first `futureActionTimes` entry instead of a last-run
+  time: if that first scheduled time falls within the price window, Gridshift places it in the
+  cheapest slot; otherwise it's skipped the same way, so a newly created long-interval schedule
+  doesn't land in a cheap slot today when its first run was meant to be weeks out.
 
 ## Setup
 
