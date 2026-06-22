@@ -14,8 +14,8 @@ use tonic::IntoRequest;
 
 use crate::{
     DiscoverSchedulesInput, DiscoverSchedulesResult, FetchWindowsInput, MeasureDurationsInput,
-    PriceProvider, PricedWindow, ProviderError, ScheduleInfo, ScheduleRef, SkippedSchedule,
-    TryFetchWindowsResult, UpdateOutcome, UpdateWindowsInput,
+    PlanWindowsInput, PlanWindowsResult, PriceProvider, PricedWindow, ProviderError, ScheduleInfo,
+    ScheduleRef, SkippedSchedule, TryFetchWindowsResult, UpdateOutcome, UpdateWindowsInput,
 };
 
 use tracing::warn;
@@ -261,6 +261,32 @@ impl GridshiftActivities {
             }),
             Err(e) => Err(ActivityError::from(anyhow::Error::from(e))),
         }
+    }
+
+    /// Assign each eligible schedule to a price window and return the full assignment plan.
+    /// Schedules that share a window fire concurrently, so the window covers the longest job.
+    /// Groups form greedily longest-first; schedules beyond the price horizon come back as skipped.
+    #[activity]
+    pub async fn plan_window_assignments(
+        self: Arc<Self>,
+        _ctx: ActivityContext,
+        input: PlanWindowsInput,
+    ) -> Result<PlanWindowsResult, ActivityError> {
+        let tz: chrono_tz::Tz = input.timezone.parse().map_err(|_| {
+            ActivityError::from(anyhow::anyhow!("invalid timezone: {:?}", input.timezone))
+        })?;
+
+        let schedule_durations: std::collections::HashMap<ScheduleRef, u32> =
+            input.schedule_durations.into_iter().collect();
+
+        Ok(crate::planning::plan_assignments(
+            input.schedules,
+            &schedule_durations,
+            input.priced_windows,
+            &tz,
+            input.now_secs,
+            input.slot_duration_mins,
+        ))
     }
 
     /// Update a managed interval schedule's phase to fire at the chosen cheap window.

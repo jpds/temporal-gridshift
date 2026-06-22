@@ -3,6 +3,7 @@ use chrono::{NaiveDate, NaiveTime};
 use serde::{Deserialize, Serialize};
 
 pub mod activities;
+pub mod planning;
 pub mod providers;
 pub mod workflow;
 
@@ -184,4 +185,33 @@ pub enum UpdateOutcome {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MeasureDurationsInput {
     pub schedules: Vec<ScheduleRef>,
+}
+
+/// Activity input for assigning managed schedules to price windows.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanWindowsInput {
+    pub schedules: Vec<ScheduleInfo>,
+    /// Duration estimates per schedule.
+    pub schedule_durations: Vec<(ScheduleRef, u32)>,
+    pub priced_windows: Vec<PricedWindow>,
+    pub timezone: String,
+    /// Workflow's current time as epoch seconds, used for horizon-skip messages.
+    pub now_secs: i64,
+    pub slot_duration_mins: u32,
+}
+
+/// A resolved assignment: one schedule mapped to the window it should fire in.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScheduleAssignment {
+    pub schedule_ref: ScheduleRef,
+    pub window: ChosenWindow,
+    pub interval_secs: u64,
+}
+
+/// Output of the plan_window_assignments activity.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanWindowsResult {
+    pub assignments: Vec<ScheduleAssignment>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skipped: Vec<SkippedSchedule>,
 }
