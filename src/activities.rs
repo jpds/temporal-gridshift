@@ -292,8 +292,9 @@ impl GridshiftActivities {
     }
 
     /// Assign each eligible schedule to a price window and return the full assignment plan.
-    /// Schedules that share a window fire concurrently, so the window covers the longest job.
-    /// Groups form greedily longest-first; schedules beyond the price horizon come back as skipped.
+    /// An ILP solver finds the globally cheapest assignment; schedules that share a window fire
+    /// concurrently so the window covers only the longest job. Schedules beyond the price
+    /// horizon come back as skipped.
     #[activity]
     pub async fn plan_window_assignments(
         self: Arc<Self>,
@@ -473,6 +474,7 @@ impl GridshiftActivities {
                         "TemporalScheduledById = \"{}\" AND ExecutionStatus = \"Completed\"",
                         sched_ref.schedule_id
                     );
+
                     // Temporal visibility is eventually consistent; a just-completed run may not
                     // appear yet, causing a slight undercount of recent history.
                     let mut wf_stream = client

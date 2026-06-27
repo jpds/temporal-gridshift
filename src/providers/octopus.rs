@@ -340,8 +340,6 @@ impl PriceProvider for OctopusProvider {
                     hour: t.hour(),
                     minute: t.minute(),
                     price_p_per_kwh: r.value_inc_vat,
-                    // Weight is re-normalized by the workflow from price_p_per_kwh.
-                    weight: 0.0,
                 }
             })
             .collect())

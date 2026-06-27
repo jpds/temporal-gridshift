@@ -22,7 +22,6 @@ pub enum ProviderError {
 #[async_trait]
 pub trait PriceProvider: Send + Sync {
     /// Return all price slots for `date` in chronological order.
-    /// Set `weight` to `0.0`; the workflow re-normalizes it from `price_p_per_kwh`.
     /// Returns [`ProviderError::NotYetPublished`] if prices are not yet available for `date`.
     async fn fetch_priced_windows(
         &self,
@@ -53,7 +52,7 @@ pub struct SchedulerInput {
     pub timezone: String,
 }
 
-/// A half-hour slot with its price and cheapness weight.
+/// A half-hour price slot from the provider.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PricedWindow {
     pub date: NaiveDate,
@@ -61,10 +60,6 @@ pub struct PricedWindow {
     pub minute: u32,
     /// Raw price in pence per kWh (inc. VAT). Negative means the supplier pays the customer.
     pub price_p_per_kwh: f64,
-    /// Normalized cheapness weight, computed in the workflow from `price_p_per_kwh`.
-    /// Not serialized: it is always recomputed after fetch and is meaningless in transit.
-    #[serde(skip)]
-    pub weight: f64,
 }
 
 /// A single chosen firing time, derived from the cheapest block in a day segment.

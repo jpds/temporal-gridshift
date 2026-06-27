@@ -86,11 +86,11 @@ impl SchedulerWorkflow {
 
         let mut skipped: Vec<SkippedSchedule> = Vec::new();
         let mut schedules: Vec<_> = Vec::new();
-        let mut slot_duration_mins = 30;
+        let mut slot_duration_mins: Option<u32> = None;
         for (ns, outcome) in namespaces.iter().zip(discover_outcomes) {
             match outcome {
                 Ok(result) => {
-                    slot_duration_mins = result.slot_duration_mins;
+                    slot_duration_mins.get_or_insert(result.slot_duration_mins);
                     skipped.extend(result.skipped);
                     schedules.extend(result.schedules);
                 }
@@ -195,7 +195,7 @@ impl SchedulerWorkflow {
                     priced_windows,
                     timezone: input.timezone.clone(),
                     now_secs,
-                    slot_duration_mins,
+                    slot_duration_mins: slot_duration_mins.unwrap_or(30),
                 },
                 ActivityOptions::start_to_close_timeout(Duration::from_secs(30)),
             )

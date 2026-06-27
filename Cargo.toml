@@ -28,6 +28,12 @@ chrono-tz = "0.9"
 # Stream combinators (for list_workflows consumption)
 futures = "0.3"
 
+# ILP solver
+good_lp   = { version = "1.15.2", default-features = false, features = ["highs"] }
+# highs-sys links the system HiGHS library. The `discover` feature uses
+# pkg-config, so HiGHS must be on PKG_CONFIG_PATH.
+highs-sys = { version = "1.14", default-features = false, features = ["discover"] }
+
 # Human-readable duration formatting
 humantime = "2"
 

@@ -37,7 +37,12 @@
         gridshift = craneLib.buildPackage {
           src = craneLib.cleanCargoSource ./.;
           inherit cargoVendorDir;
-          nativeBuildInputs = [ pkgs.protobuf ];
+          nativeBuildInputs = [
+            pkgs.protobuf
+            pkgs.pkg-config
+            pkgs.rustPlatform.bindgenHook
+          ];
+          buildInputs = [ pkgs.highs ];
         };
       in
       {

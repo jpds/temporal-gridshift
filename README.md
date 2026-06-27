@@ -15,19 +15,17 @@ a provider's API.
 1. The `SchedulerWorkflow` runs on a Temporal schedule (daily by default).
 2. It calls `ListNamespaces` to enumerate every namespace on the cluster (excluding
    `temporal-system`), then runs the visibility query (e.g. `EnergyIntensive = true`) in each
-   one. Namespaces where the query fails (search attribute not registered, permission denied, etc.)
-   are skipped gracefully; a reason is recorded in the workflow result so it is visible in the
-   Temporal Web UI.
-3. It fetches half-hourly Agile prices from the Octopus API for today and tomorrow, then combines
-   the still-future slots into one pool and re-normalizes each slot's cheapness weight across it.
-4. It groups schedules that can share a firing window and assigns each group to the cheapest
-   available block. Schedules in the same group fire at the same phase offset and run
-   concurrently, so the window only needs to cover the longest job's duration. Grouping works
-   longest-first: a shorter job joins an existing group when the merged window (widened to the
-   longest member's duration and constrained to the latest member's eligibility floor) is at
-   least as cheap per slot as the job would get on its own. If no group qualifies, the job
-   starts its own. Once a group claims a block, those slots are down-weighted so subsequent
-   groups spread out rather than stacking on the same window.
+   one.
+  - Namespaces where the query fails are skipped gracefully; a reason is recorded in the
+    workflow result so it is visible in the Temporal Web UI.
+3. It fetches the configured windows of prices from the provider API for today and tomorrow, then
+   combines the still-future slots into one pool.
+4. It assigns each schedule to a price window using an integer linear program (HiGHS solver).
+  - Schedules that share a start slot fire at the same phase offset and run concurrently, so the
+    window cost is determined by the longest job's duration; shorter co-located jobs add no extra
+    cost.
+  - The ILP minimizes total electricity cost across all assignments simultaneously, which
+    correctly handles negative prices and finds co-location opportunities a greedy pass would miss.
 5. To avoid running a job more often than its interval, slots less than one interval after the
    schedule's last actual run are excluded; if that leaves no eligible slot, the schedule is left
    on its current spec.
