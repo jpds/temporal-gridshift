@@ -2,6 +2,7 @@ use std::time::{Duration, SystemTime};
 
 use chrono::{DateTime, Timelike, Utc};
 use chrono_tz::Tz;
+use temporalio_common::protos::temporal::api::common::v1::RetryPolicy;
 use temporalio_macros::{workflow, workflow_methods};
 use temporalio_sdk::workflows::{join, join_all};
 use temporalio_sdk::{
@@ -213,20 +214,36 @@ impl SchedulerWorkflow {
                     timezone: input.timezone.clone(),
                     interval_secs: a.interval_secs,
                 },
-                ActivityOptions::start_to_close_timeout(Duration::from_secs(60)),
+                // The server default retry policy never gives up, so one stuck schedule
+                // (deleted namespace, lost connectivity) would hang the whole nightly run.
+                // Bound the attempts; the failure lands in `skipped` below and the next
+                // evening's run tries again. Unset fields keep server defaults.
+                ActivityOptions::with_start_to_close_timeout(Duration::from_secs(60))
+                    .retry_policy(RetryPolicy {
+                        maximum_attempts: 5,
+                        ..Default::default()
+                    })
+                    .build(),
             )
         });
         let outcomes = join_all(dispatched).await;
 
         let mut updates: Vec<ScheduleUpdateSummary> = Vec::new();
         for (a, outcome) in plan_result.assignments.into_iter().zip(outcomes) {
-            match outcome? {
-                UpdateOutcome::Skipped { reason } => skipped.push(SkippedSchedule {
+            match outcome {
+                // Same policy as discover_schedules failures: record the schedule as
+                // skipped rather than failing the run and losing the other updates.
+                Err(e) => skipped.push(SkippedSchedule {
+                    namespace: a.schedule_ref.namespace,
+                    schedule_id: a.schedule_ref.schedule_id,
+                    reason: format!("update_schedule_windows failed: {e:?}"),
+                }),
+                Ok(UpdateOutcome::Skipped { reason }) => skipped.push(SkippedSchedule {
                     namespace: a.schedule_ref.namespace,
                     schedule_id: a.schedule_ref.schedule_id,
                     reason,
                 }),
-                UpdateOutcome::Updated => {
+                Ok(UpdateOutcome::Updated) => {
                     let fires_per_day = (SECS_PER_DAY / a.interval_secs).max(1) as i64;
                     let step_mins = (a.interval_secs / 60) as i64;
                     let windows = (0..fires_per_day)

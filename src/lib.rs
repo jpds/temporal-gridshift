@@ -170,9 +170,9 @@ pub struct UpdateWindowsInput {
 }
 
 /// Outcome of an update_schedule_windows activity call.
-/// A schedule the worker can read but lacks permission to update comes back as `Skipped`
-/// so the workflow routes it to its skipped list instead of counting it as a successful
-/// update; otherwise the result would over-report what changed.
+/// A schedule the worker lacks permission to update, or that was deleted since discovery,
+/// comes back as `Skipped` so the workflow routes it to its skipped list instead of
+/// counting it as a successful update; otherwise the result would over-report what changed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateOutcome {
     Updated,

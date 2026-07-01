@@ -413,6 +413,18 @@ impl GridshiftActivities {
             .await
         {
             Ok(()) => Ok(UpdateOutcome::Updated),
+            Err(ScheduleError::Rpc(status)) if status.code() == tonic::Code::NotFound => {
+                // Deleted between discovery and update. Gridshift does not own these
+                // schedules, so this race is expected; retrying cannot succeed.
+                warn!(
+                    namespace = %input.namespace,
+                    schedule_id = %input.schedule_id,
+                    "schedule deleted since discovery; skipping"
+                );
+                Ok(UpdateOutcome::Skipped {
+                    reason: "schedule no longer exists".to_owned(),
+                })
+            }
             Err(ScheduleError::Rpc(status)) if status.code() == tonic::Code::PermissionDenied => {
                 warn!(
                     namespace = %input.namespace,
